@@ -1,1 +1,1 @@
-# GA-ATAC
+# scATAC
