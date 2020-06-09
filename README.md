@@ -4,7 +4,7 @@
 
 This repository contains the PyTorch implementation for Geneartive Adversarial ATAC (GA-ATAC) clutering. The network structure is:
 
-![avatar](network.png)
+![avatar](./network.png)
 
 ## Dependencies
     + pysam==0.15.4
