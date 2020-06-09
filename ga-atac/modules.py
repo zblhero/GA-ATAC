@@ -1,0 +1,123 @@
+import collections
+from typing import Iterable, List
+
+import torch
+from torch import nn as nn
+from torch.distributions import Normal
+from torch.nn import ModuleList
+import torch.nn.functional as F
+
+from utils import *
+
+
+def reparameterize_gaussian(mu, var):
+    return Normal(mu, var.sqrt()).rsample()
+
+
+# Encoder
+class Encoder(nn.Module):
+
+    def __init__(
+        self,
+        n_input: int,
+        n_output: int,
+        n_cat_list: Iterable[int] = None,
+        n_layers: int = 1,
+        n_hidden: int = 128,
+        dropout_rate: float = 0.1
+    ):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_input, n_hidden),
+            nn.BatchNorm1d(n_hidden, momentum=0.01, eps=0.001),
+            nn.ReLU()
+        )
+        self.mean_encoder = nn.Linear(n_hidden, n_output)
+        self.var_encoder = nn.Linear(n_hidden, n_output)
+
+    def forward(self, x: torch.Tensor, *cat_list: int):
+        
+        # Parameters for latent distribution
+        q = self.encoder(x)
+        q_m = self.mean_encoder(q)
+        q_v = torch.exp(self.var_encoder(q)) + 1e-4
+        latent = reparameterize_gaussian(q_m, q_v)
+        return q_m, q_v, latent
+
+
+# Decoder
+class DecoderSCVI(nn.Module):
+
+    def __init__(
+        self,
+        n_input: int,
+        n_output: int,
+        n_cat_list: Iterable[int] = None,
+        n_layers: int = 1,
+        n_hidden: int = 128,
+    ):
+        super().__init__()
+        self.px_decoder = nn.Sequential(
+            nn.Linear(n_input, n_hidden),
+            nn.BatchNorm1d(n_hidden, momentum=0.01, eps=0.001),
+            nn.ReLU()
+        )
+
+        # mean gamma
+        self.px_scale_decoder = nn.Sequential(
+            nn.Linear(n_hidden, n_output), 
+            nn.Softmax(dim=-1)
+        )
+
+        # dispersion: here we only deal with gene-cell dispersion case
+        self.px_r_decoder = nn.Sequential(
+                    nn.Linear(n_hidden, n_output), 
+                    nn.ReLU()
+        )
+
+        # dropout
+        self.px_dropout_decoder = nn.Linear(n_hidden, n_output)
+        
+        # alpha for Beta
+        self.px_alpha_decoder = nn.Sequential(
+                    nn.Linear(n_hidden, n_output), 
+                    nn.ReLU()
+        )
+
+    def forward(
+        self, dispersion: str, z: torch.Tensor, library: torch.Tensor, *cat_list: int
+    ):  
+        # The decoder returns values for the parameters of the ZINB distribution
+        px = self.px_decoder(z)   # cat list includes batch index
+        px_scale = self.px_scale_decoder(px)
+        px_dropout = self.px_dropout_decoder(px)
+        
+        px_alpha = self.px_alpha_decoder(px)+1
+        # Clamp to high value: exp(12) ~ 160000 to avoid nans (computational stability)
+        px_rate = torch.exp(library) * px_scale  # torch.clamp( , max=12)
+        px_r = self.px_r_decoder(px) if dispersion == "gene-cell" else None
+        return px_scale, px_r, px_rate, px_dropout, px_alpha
+    
+
+
+class Discriminator(nn.Module):
+    def __init__(self, input_dim, hidden_size, gan_loss):
+        super(Discriminator, self).__init__()
+        
+        self.model = nn.Sequential(
+                nn.Linear(input_dim, 512),
+                nn.BatchNorm1d(512, momentum=0.01, eps=0.001),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Dropout(0.4),
+                nn.Linear(512, 256),
+                nn.BatchNorm1d(256, momentum=0.01, eps=0.001),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Dropout(0.4),
+                nn.Linear(256, 1),
+                nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        validity = self.model(x)
+
+        return validity

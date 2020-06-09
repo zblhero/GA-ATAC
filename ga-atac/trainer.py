@@ -2,6 +2,7 @@
 import logging
 import sys
 import time
+import copy
 
 from abc import abstractmethod
 from collections import defaultdict, OrderedDict
@@ -16,6 +17,7 @@ from torch.optim.lr_scheduler import ExponentialLR, MultiStepLR
 from torch.optim import RMSprop, Adam, SGD
 from tqdm import trange
 from utils import *
+
 
 
 
@@ -91,66 +93,6 @@ class Trainer:
         name = name.strip("_")
         self._posteriors[name] = value
 
-    '''def corrupt_posteriors(
-        self, rate=0.1, corruption="uniform", update_corruption=True
-    ):
-        if not hasattr(self.gene_dataset, "corrupted") and update_corruption:
-            self.gene_dataset.corrupt(rate=rate, corruption=corruption)
-        for name, posterior in self._posteriors.items():
-            self.register_posterior(name, posterior.corrupted())
-
-    def uncorrupt_posteriors(self):
-        for name_, posterior in self._posteriors.items():
-            self.register_posterior(name_, posterior.uncorrupted())
-
-    def __getattr__(self, name):
-        if "_posteriors" in self.__dict__:
-            _posteriors = self.__dict__["_posteriors"]
-            if name.strip("_") in _posteriors:
-                return _posteriors[name.strip("_")]
-        return object.__getattribute__(self, name)
-
-    def __delattr__(self, name):
-        if name.strip("_") in self._posteriors:
-            del self._posteriors[name.strip("_")]
-        else:
-            object.__delattr__(self, name)
-
-    def __setattr__(self, name, value):
-        if isinstance(value, Posterior):
-            name = name.strip("_")
-            self.register_posterior(name, value)
-        else:
-            object.__setattr__(self, name, value)'''
-
-    @torch.no_grad()
-    def compute_metrics(self):
-        begin = time.time()
-        epoch = self.epoch + 1
-        if self.frequency and (
-            epoch == 0 or epoch == self.n_epochs or (epoch % self.frequency == 0)
-        ):
-            with torch.set_grad_enabled(False):
-                self.model.eval()
-
-                for name, posterior in self._posteriors.items():
-                    message = " ".join([s.capitalize() for s in name.split("_")[-2:]])
-                    if posterior.nb_cells < 5:
-                        logging.debug(
-                            message + " is too small to track metrics (<5 samples)"
-                        )
-                        continue
-                    if hasattr(posterior, "to_monitor"):
-                        for metric in posterior.to_monitor:
-                            if metric not in self.metrics_to_monitor:
-                                result = getattr(posterior, metric)()
-                                self.history[metric + "_" + name] += [result]
-                    for metric in self.metrics_to_monitor:
-                        result = getattr(posterior, metric)()
-                        self.history[metric + "_" + name] += [result]
-                self.model.train()
-        self.compute_metrics_time += time.time() - begin
-
     def train(self, n_epochs=20, lr=1e-4, eps=0.01, decay_lr=0.75, params=None):
         begin = time.time()
         self.model.train()
@@ -168,8 +110,6 @@ class Trainer:
         with trange(
             n_epochs, desc="training", file=sys.stdout, disable=not self.show_progbar
         ) as pbar:
-            # We have to use tqdm this way so it works in Jupyter notebook.
-            # See https://stackoverflow.com/questions/42212810/tqdm-in-jupyter-notebook
             for self.epoch in pbar:
                 self.on_epoch_begin()
                 pbar.update(1)
@@ -218,81 +158,68 @@ class Trainer:
         pass
 
     def on_epoch_end(self):
-        #self.compute_metrics()
-        #print('*****on epoch end', self.history["elbo_train_set"][-1], continue_training)
         return True
-
-
-
-    '''def train_test_validation(
-        self,
-        model=None,
-        gene_dataset=None,
-        train_size=0.1,
-        test_size=None,
-        type_class=Posterior,
-    ):
-        model = self.model if model is None and hasattr(self, "model") else model
-        gene_dataset = (
-            self.gene_dataset
-            if gene_dataset is None and hasattr(self, "model")
-            else gene_dataset
-        )
-        n = len(gene_dataset)
-        if train_size == 1.0:
-            n_train = n
-            n_test = 0
-        else:
-            n_train, n_test = _validate_shuffle_split(n, test_size, train_size)
-        
-        random_state = np.random.RandomState(seed=self.seed)
-        permutation = random_state.permutation(n)
-        indices_test = permutation[:n_test]
-        indices_train = permutation[n_test : (n_test + n_train)]
-        indices_validation = permutation[(n_test + n_train) :]
-
-        
-        return (
-            self.create_posterior(
-                model, gene_dataset, indices=indices_train, type_class=type_class
-            ),
-            self.create_posterior(
-                model, gene_dataset, indices=indices_test, type_class=type_class
-            ),
-            self.create_posterior(
-                model, gene_dataset, indices=indices_validation, type_class=type_class
-            ),
-        )
-
-    def create_posterior(
-        self,
-        model=None,
-        gene_dataset=None,
-        shuffle=False,
-        indices=None,
-        type_class=Posterior,
-    ):
-        model = self.model if model is None and hasattr(self, "model") else model
-        gene_dataset = (
-            self.gene_dataset
-            if gene_dataset is None and hasattr(self, "model")
-            else gene_dataset
-        )
-        return type_class(
-            model,
-            gene_dataset,
-            shuffle=shuffle,
-            indices=indices,
-            use_cuda=self.use_cuda,
-            data_loader_kwargs=self.data_loader_kwargs,
-        )'''
     
+    
+class UnsupervisedTrainer(Trainer):
+    default_metrics_to_monitor = ["elbo"]
 
-
-class SequentialSubsetSampler(SubsetRandomSampler):
-    def __init__(self, indices):
-        self.indices = np.sort(indices)
-
+    def __init__(
+        self,
+        model,
+        gene_dataset,
+        train_size=0.8,
+        test_size=None,
+        n_epochs_kl_warmup=400,
+        **kwargs
+    ):
+        super().__init__(model, gene_dataset, **kwargs)
+        self.n_epochs_kl_warmup = n_epochs_kl_warmup
+        if type(self) is UnsupervisedTrainer:
+            #self.train_set, self.test_set, self.validation_set = self.train_test_validation(
+            #    model, gene_dataset, train_size, test_size
+            #)
+            random_state = np.random.RandomState(seed=self.seed)
+            permutation = random_state.permutation(len(gene_dataset))
+            indices_train = permutation[0 : len(gene_dataset)]
+            
+            data_loader_kwargs = {'X': np.float32, 'local_means': np.float32, 'local_vars': np.float32, 'batch_indices': np.int64, 'labels': np.int64}
+            
+            self.data_loader_kwargs = copy.copy(self.data_loader_kwargs)
+            sampler = SequentialSampler(gene_dataset)
+            self.data_loader_kwargs.update(
+                {"collate_fn": gene_dataset.collate_fn_builder(), "sampler": sampler}
+            )
+            self.train_set = DataLoader(gene_dataset, **self.data_loader_kwargs)
+            self.train_set.to_monitor = ["elbo"]
+            #self.test_set.to_monitor = ["elbo"]
+            #self.validation_set.to_monitor = ["elbo"]
+            
     def __iter__(self):
-        return iter(self.indices)
+        return map(self.to_cuda, iter(self.train_set))
+
+    def to_cuda(self, tensors):
+        return [t.cuda() if self.use_cuda else t for t in tensors]
+
+    @property
+    def posteriors_loop(self):
+        return ["train_set"]
+
+    def loss(self, sample_batch, local_l_mean, local_l_var, batch_index, t):  # tensors is local data
+        #print('loss', self.n_epochs_kl_warmup, self.kl_weight)
+        #sample_batch, local_l_mean, local_l_var, batch_index, _ = tensors
+        loss = self.model(sample_batch, local_l_mean, local_l_var, batch_index)
+        
+        reconst_loss, kl_divergence, g_loss, d_loss, z_rec_loss = loss
+        return torch.mean(reconst_loss + self.kl_weight * kl_divergence), g_loss, d_loss, z_rec_loss
+        
+
+    def on_epoch_begin(self):
+        if self.n_epochs_kl_warmup is not None:
+            self.kl_weight = min(1, self.epoch / self.n_epochs_kl_warmup)
+        else:
+            self.kl_weight = 1.0
+            #self.kl_weight = 0
+        
+        self.gan_weight = 1.0
 

@@ -171,7 +171,7 @@ def extract(dataset='GSE99172'):
     return X, cells, peaks, labels, cell_types, tlabels
 
 def extract_data(dataset='GSE65360'):
-    dirname = '../simulated_data/%s/'%(dataset)
+    dirname = '../data/%s/'%(dataset)
     
     i = 0
     mat, peaks, labels, cell_types, tlabels = [], [], [], [], []
@@ -198,7 +198,7 @@ def extract_data(dataset='GSE65360'):
 
 
 def extract_simulated(dataset='GSE65360', suffix='clean'):
-    dirname = '/../simulated_data/%s/'%(dataset)
+    dirname = '../data/%s/'%(dataset)
     
     
     

@@ -129,5 +129,22 @@ def one_hot(index, n_cat):
     onehot.scatter_(1, index.type(torch.long), 1)
     return onehot.type(torch.float32)
 
+def log_nb_positive(x, mu, theta, eps=1e-8):
+    if theta.ndimension() == 1:
+        theta = theta.view(
+            1, theta.size(0)
+        )  # In this case, we reshape theta for broadcasting
+
+    log_theta_mu_eps = torch.log(theta + mu + eps)
+
+    res = (
+        theta * (torch.log(theta + eps) - log_theta_mu_eps)
+        + x * (torch.log(mu + eps) - log_theta_mu_eps)
+        + torch.lgamma(x + theta)
+        - torch.lgamma(theta)
+        - torch.lgamma(x + 1)
+    )
+    return torch.sum(res, dim=-1)
+
 
 

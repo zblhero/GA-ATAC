@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-from inference import UnsupervisedTrainer
+from trainer import UnsupervisedTrainer
+#from train import train
 from datasetfilter import SingleCellDataset
 
 import torch
@@ -14,12 +15,15 @@ import pickle
 import random
 import torchsummary
 from torchvision.models.resnet import *
+
 from utils import *
+import extract
 
 save_path = 'models/'
 
+plt.switch_backend("agg")
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-import extract
+
 
 
 def set_seed(seed):
@@ -42,8 +46,6 @@ def main(n_hidden, n_latent, dropout, louvain_num, ratio=0.1, seed=42):
         
     print(X.shape, np.sum(X), np.sum(X[0]))
         
-    n_epochs = 1000
-    lr = 1e-4
     use_batches = False
     use_cuda = True
     
@@ -60,27 +62,27 @@ def main(n_hidden, n_latent, dropout, louvain_num, ratio=0.1, seed=42):
     else:
         gene_dataset = SCDataset('models/', mat=X, ylabels=labels, tlabels=tlabels, cell_types=cell_types)#, batch_ids_file=batch_ids_file)
     
-    vae = AlphaGAN(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
+    model = GAATAC(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
              n_hidden=n_hidden, n_latent=n_latent, dropout_rate=dropout, reconst_ratio=ratio).cuda()
     trainer = UnsupervisedTrainer(
-        vae,
+        model,
         gene_dataset,
         train_size=1.0,
         use_cuda=use_cuda,
         frequency=5
     )
     model_name = '%s/%s.pkl'%(save_path, dataset)
+    
+    #train(model, gene_dataset)
 
     if os.path.isfile(model_name):
         trainer.model.load_state_dict(torch.load(model_name))
         trainer.model.eval()
     else:
-        trainer.train(n_epochs=n_epochs, lr=lr)
+        trainer.train(n_epochs=1000)
         torch.save(trainer.model.state_dict(), model_name)
         
     latent = get_latent(gene_dataset, trainer.model)
-    #full = trainer.create_posterior(trainer.model, gene_dataset, indices=np.arange(len(gene_dataset)))
-    #latent, _, _ = full.sequential().get_latent()  # sample from posterior (return the mean)
     clustering_scores(latent, labels, cells, dataset, suffix, gene_dataset.tlabels, louvain_num, seed)
      
     
