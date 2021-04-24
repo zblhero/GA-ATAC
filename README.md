@@ -14,7 +14,7 @@ This repository contains the PyTorch implementation for Geneartive Adversarial A
     + tqdm==4.28.1
     
 ## Usage
-    ```python3 main.py```
+    ```python3.7 main.py --dataset=GM12878vsHL --n_hidden=512 --n_latent=24 --min_peaks=0 --min_cells=0.0 --max_cells=1.0```
     
     
 ## References

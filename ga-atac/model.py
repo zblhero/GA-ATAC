@@ -187,8 +187,8 @@ class GAATAC(nn.Module):
             
             
         # GAN loss
+        #print('train g', px_rate.shape, torch.min(px_rate), torch.max(px_rate), valid.shape, torch.min(valid), torch.max(valid))
         g_loss = adversarial_loss(self.discriminator(px_rate), valid)# + adversarial_loss(self.discriminator(x_fake), valid)
         d_loss = adversarial_loss(self.discriminator(x), valid) +  adversarial_loss(self.discriminator(px_rate), fake) + adversarial_loss(self.discriminator(x_fake), fake)
-                
             
         return self.reconst_ratio*reconst_loss, kl_divergence_l+kl_divergence_z, g_loss, d_loss, z_rec_loss

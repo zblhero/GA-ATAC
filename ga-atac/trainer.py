@@ -115,8 +115,9 @@ class Trainer:
                 pbar.update(1)
                 #for tensors_list in self.data_loaders_loop():
                 for tensors_list in self.train_set:
-                    for i in range(len(tensors_list)):
-                        tensors_list[i] = tensors_list[i].cuda()
+                    if self.use_cuda:
+                        for i in range(len(tensors_list)):
+                            tensors_list[i] = tensors_list[i].cuda() 
                     if tensors_list[0][0].shape[0] < 3:
                         continue
                     loss = self.loss(*tensors_list)

@@ -2,12 +2,13 @@ import torch
 
 import community
 import networkx as nx
+import os, os.path
 
 import numpy as np
 from matplotlib import pyplot as plt
 
 from sklearn.neighbors import NearestNeighbors, KNeighborsRegressor
-from sklearn.utils.linear_assignment_ import linear_assignment
+from scipy.optimize import linear_sum_assignment as linear_assignment
 from sklearn.neighbors import kneighbors_graph
 from sklearn.manifold import TSNE
 
@@ -56,34 +57,56 @@ def get_latent(gene_dataset, model):
     return np.array(torch.cat(latent).detach())
 
 
-def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_num, seed=42):
+def clustering_scores(latent, cells, labels, dataset, tlabels, n_hidden, n_latent, louvain_num, seed=42):
 
     from scipy.spatial import distance
-                    
-    vec = latent
+    
     mat = kneighbors_graph(latent, louvain_num, mode='distance', include_self=True).todense()
     G = nx.from_numpy_matrix(mat)
     partition = community.best_partition(G, random_state=seed)
-                    
+
     labels_pred = []
     for i in range(mat.shape[0]):
         labels_pred.append(partition[i])
-                    
+
     labels_pred = np.array(labels_pred)
+    
+    if not os.path.exists('result/%s'%(dataset)):
+        os.mkdir('result/%s'%(dataset))
                     
-    tsne = TSNE(random_state=seed).fit_transform(vec)  
-             
-    asw_score = silhouette_score(latent, labels)
-    nmi_score = NMI(labels, labels_pred)
-    ari_score = ARI(labels, labels_pred)
-    homo_score = homogeneity_score(labels, labels_pred) 
-    uca_score = unsupervised_clustering_accuracy(labels, labels_pred)[0]
-                    
-    print("Clustering Scores:\nSilhouette: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f\nHOMO:%.4f"
-                    % (asw_score, nmi_score, ari_score, uca_score, homo_score))
-               
-    show_tsne(tsne, labels, 'result/%s.png'%(dataset), tlabels=tlabels)         
-    return asw_score, nmi_score, ari_score, uca_score
+    if len(labels) > 0:
+        
+        asw_score = silhouette_score(latent, labels)
+        nmi_score = NMI(labels, labels_pred)
+        ari_score = ARI(labels, labels_pred)
+        homo_score = homogeneity_score(labels, labels_pred) 
+        #uca_score = unsupervised_clustering_accuracy(labels, labels_pred)[0]
+        uca_score = 0
+
+        print("Clustering Scores:\nSilhouette: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f\nHOMO:%.4f"
+                        % (asw_score, nmi_score, ari_score, uca_score, homo_score))
+        
+        vec = latent
+        tsne = TSNE(random_state=seed).fit_transform(vec)
+        show_tsne(tsne, labels_pred, 'result/%s/%s-%d-%d-%d-pred.png'%(dataset, dataset, n_hidden, n_latent, louvain_num), tlabels=tlabels) 
+        
+        with open('result/%s/%s-%d-%d-%d-cluster_result.csv'%(dataset, dataset, n_hidden, n_latent, louvain_num), 'w') as f:
+            f.write('cell,predicted label,tsne-1,tsne-2\n')
+            for cell, pred, t in zip(cells, labels_pred, tsne):
+                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
+        return asw_score, nmi_score, ari_score, uca_score
+    else:
+        vec = latent
+        tsne = TSNE(random_state=seed).fit_transform(vec)
+        show_tsne(tsne, labels_pred, 'result/%s/%s-%d-%d-%d-pred.png'%(dataset, dataset, n_hidden, n_latent, louvain_num), tlabels=tlabels) 
+        
+        with open('result/%s/%s-%d-%d-%d-cluster_result.csv'%(dataset, dataset, n_hidden, n_latent, louvain_num), 'w') as f:
+            f.write('cell,predicted label,tsne-1,tsne-2\n')
+            for cell, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
+                f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
+
+
+        
 
 
 def unsupervised_clustering_accuracy(y, y_pred):
@@ -107,6 +130,7 @@ def show_tsne(tsne, labels, filename, tlabels=None):
     colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'yellow', 'black', 'teal', 'plum', 'tan', 'bisque', 'beige', 'slategray', 'brown', 'darkred', 'salmon', 'coral', 'olive', 'lightpink', 'teal', 'darkcyan']
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    
     for i, y in enumerate(range(n_components)):
 
         indexes = [j for j in range(len(labels)) if labels[j]==y]
@@ -118,6 +142,7 @@ def show_tsne(tsne, labels, filename, tlabels=None):
             sc = plt.scatter(vis_x1, vis_y1, c=c, marker='.', cmap='hsv', label=y)
         else:
             sc = plt.scatter(vis_x1, vis_y1, c=c, marker='.', cmap='hsv', label=tlabels[indexes[0]])
+        
     ax.legend()
     plt.clim(-0.5, 9.5)
     plt.savefig(filename)
