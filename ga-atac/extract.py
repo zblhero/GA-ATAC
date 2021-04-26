@@ -48,25 +48,24 @@ def read_labels(filename, cells, dataset):
     
     
 def read_pos(filename):
-    bases, regions = {}, []
+    peaks = []
     
     with open(os.path.dirname(__file__) +filename) as f:
         chr_lines = f.readlines()
         for line in chr_lines:
             
-            sp = '_' if 'txt' in filename else '\t'
+            sp = ':' if 'txt' in filename else '\t'
             values = line.strip().split(sp)
             if len(values) > 3:
                 key, start, end = '_'.join(values[:-2]), int(values[-2]), int(values[-1])
+            elif len(values) == 2:
+                offsets = values[1].split('-')
+                key, start, end = values[0], int(offsets[0]), int(offsets[1])
             else:
                 key, start, end = values[0], int(values[1]), int(values[2])
             
-            if values[0] in bases:    
-                bases[values[0]].append((start, end))
-            else:
-                bases[values[0]] = [(start, end)]
-            regions.append((key, start, end))
-    return bases, regions
+            peaks.append((key, start, end))
+    return peaks
 
 def load_data(filename):
     #if '65361' in filename:
@@ -90,14 +89,17 @@ def load_data(filename):
     return X
 
 
-def extract_simulated(dataset='GSE65360', suffix='clean'):
+def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean'):
     dirname = '/../data/%s/'%(dataset) 
     
-    bases, peaks = read_pos(dirname+'%s_peak.txt'%(dataset))
-    cells = read_barcodes(dirname+'%s_barcode.txt'%(dataset))
-
-    labels, cell_types, tlabels = read_labels(dirname+'%s_celltype_info.csv'%(dataset), cells, dataset)
-    X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset))
+    peaks = read_pos(dirname+'%s_peaks.txt'%(dataset))
+    cells = read_barcodes(dirname+'%s_barcodes.txt'%(dataset))
+    
+    if is_labeled:
+        labels, cell_types, tlabels = read_labels(dirname+'%s_celltype_info.csv'%(dataset), cells, dataset)
+    else:
+        labels, cell_types, tlabels = None, None, None
+    X = load_data(dirname+'%s_downloadSparseMatrix.txt'%(dataset))
     
     return X, cells, peaks, labels, cell_types, tlabels
     

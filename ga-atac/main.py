@@ -23,8 +23,7 @@ import argparse
 save_path = 'models/'
 
 plt.switch_backend("agg")
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-use_cuda = True if torch.cuda.is_available() else False
+
 
 
 
@@ -36,25 +35,29 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
     
-def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, min_peaks=100, min_cells=0.05, max_cells=0.95, n_epochs=1000):
+def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, min_peaks=100, min_cells=0.05, max_cells=0.95, n_epochs=1000, 
+            is_labeled=True, gpu=-1):
     set_seed(seed)
     use_batches = False
     
-    X, cells, peaks, labels, cell_types, tlabels, = extract.extract_simulated(dataset)   # downloaded  
+    if gpu >= 0:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "%d"%(gpu)
+        use_cuda = True if torch.cuda.is_available() else False
+    else:
+        use_cuda = False
+    
+    X, cells, peaks, labels, cell_types, tlabels, = extract.extract_simulated(dataset, is_labeled)   # downloaded  
     X = np.where(X>0, 1, 0) 
-    print('read raw data info', X.shape, np.sum(X), np.sum(X[0]), use_cuda)
-        
-    
-    
     
     d = SingleCellDataset(X, peaks, cells, low=min_cells, high=max_cells, min_peaks=min_peaks)
     labels = [labels[i] for i in d.barcode if labels is not None]
     tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]
+    print('labels', labels, tlabels)
     gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)   
     print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min())
     
     model = GAATAC(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
-             n_hidden=n_hidden, n_latent=n_latent, dropout_rate=0, reconst_ratio=ratio)
+             n_hidden=n_hidden, n_latent=n_latent, dropout_rate=0, reconst_ratio=ratio, use_cuda=use_cuda)
     if use_cuda:
         model.cuda()
     trainer = UnsupervisedTrainer(
@@ -70,7 +73,7 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, min_pea
     trainer.train(n_epochs=n_epochs)
     #torch.save(trainer.model.state_dict(), model_name)
         
-    latent = get_latent(gene_dataset, trainer.model)
+    latent = get_latent(gene_dataset, trainer.model, use_cuda)
     
     print('get clustering', n_hidden, n_latent, louvain_num)
     clustering_scores(latent, cells, labels, dataset, gene_dataset.tlabels, n_hidden, n_latent, louvain_num, seed)
@@ -104,10 +107,11 @@ if __name__ == "__main__":
     parser.add_argument('--max_cells', type=float, default=0.95, help='Remove low quality peaks')
     parser.add_argument('--n_epochs', type=int, default=1000, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--labeled', type=int, default=1, help='has label data (cell type file)') # 1 stands for existing of celltype file
     
 
     args = parser.parse_args()    
-    
     cluster(args.dataset, args.n_hidden, args.n_latent, args.n_louvain, 
-                seed=args.seed, min_peaks=args.min_peaks, min_cells=args.min_cells, max_cells=args.max_cells, n_epochs=args.n_epochs)
+            seed=args.seed, min_peaks=args.min_peaks, min_cells=args.min_cells, max_cells=args.max_cells, n_epochs=args.n_epochs,
+            is_labeled=args.labeled, gpu=args.gpu)
     

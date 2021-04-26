@@ -36,14 +36,19 @@ class SingleCellDataset(Dataset):
         self.peaks = np.array([i for i in range(data.shape[1])])
         self.barcode = np.array([i for i in range(len(barcode))])
         
+        print('init single cell')
+        
         if min_peaks > 0:
             self.filter_cell(min_peaks)
         
+            print('filtercell' )
         self.filter_peak(low, high)
         
+        print('filter')
         for transform in transforms:
             self.data = transform(self.data)
         
+        print('transform')
         self.n_cells, self.n_peaks = self.data.shape
         self.shape = self.data.shape
 
@@ -84,6 +89,7 @@ class SingleCellDataset(Dataset):
         if min_peaks < 1:
             min_peaks = len(self.peaks)*min_peaks
         indices = np.where(np.sum(self.data>0, 1)>=min_peaks)[0]
+        print('filtercell', indices.shape)
         self.data = self.data[indices]
         self.barcode = self.barcode[indices]
         

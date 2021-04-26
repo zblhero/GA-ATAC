@@ -67,6 +67,7 @@ class Trainer:
             self.metrics_to_monitor = set(self.default_metrics_to_monitor)
 
 
+        
         self.use_cuda = use_cuda and torch.cuda.is_available()
         if self.use_cuda:
             self.model.cuda()

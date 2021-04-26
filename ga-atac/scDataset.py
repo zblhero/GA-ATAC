@@ -69,12 +69,11 @@ class SCDataset(DownloadableDataset):
             
             
 
-        logger.info("Finished preprocessing dataset")
-
+        print('labels', self.ylabels, self.cell_types, batch_indices, gene_names)
         self.populate_from_data(
             X=self.mat,
             batch_indices=batch_indices,
-            labels=self.ylabels,
+            labels=None,
             gene_names=gene_names,
             cell_types=self.cell_types,
         )

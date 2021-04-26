@@ -40,7 +40,8 @@ class GAATAC(nn.Module):
         n_centroids = 12,
         X = None,
         gan_loss = 'gan',
-        reconst_ratio = 1
+        reconst_ratio = 1,
+        use_cuda = False
     ):
         super().__init__()
         self.dispersion = dispersion
@@ -57,6 +58,7 @@ class GAATAC(nn.Module):
         self.X = X
         self.gan_loss = gan_loss
         self.reconst_ratio = reconst_ratio
+        self.use_cuda = use_cuda
         
         
         self.px_r = torch.nn.Parameter(torch.randn(n_input))
@@ -171,21 +173,31 @@ class GAATAC(nn.Module):
         #d_loss = 0
         #g_loss = 0
         
-        valid = Variable(FLOAT(x.size(0), 1).fill_(1.0), requires_grad=False)
-        fake = Variable(FLOAT(x.size(0), 1).fill_(0.0), requires_grad=False)
-        idx = torch.randperm(self.X.shape[0])
-        x_real = FLOAT(self.X[idx[:x.size(0)]])
+        
             
         # generate sample from random priors
-        z_prior = reparameterize_gaussian(torch.zeros(qz_m.shape).cuda(), torch.ones(qz_v.shape).cuda())
-        l_prior = reparameterize_gaussian(torch.zeros(ql_m.shape).cuda(), torch.ones(ql_v.shape).cuda())
+        if self.use_cuda:
+            valid = Variable(FLOAT(x.size(0), 1).fill_(1.0), requires_grad=False)
+            fake = Variable(FLOAT(x.size(0), 1).fill_(0.0), requires_grad=False)
+            idx = torch.randperm(self.X.shape[0])
+            x_real = FLOAT(self.X[idx[:x.size(0)]])
+            z_prior = reparameterize_gaussian(torch.zeros(qz_m.shape).cuda(), torch.ones(qz_v.shape).cuda())
+            l_prior = reparameterize_gaussian(torch.zeros(ql_m.shape).cuda(), torch.ones(ql_v.shape).cuda())
+        else:
+            valid = Variable(torch.FloatTensor(x.size(0), 1).fill_(1.0), requires_grad=False)
+            fake = Variable(torch.FloatTensor(x.size(0), 1).fill_(0.0), requires_grad=False)
+            idx = torch.randperm(self.X.shape[0])
+            x_real = torch.FloatTensor(self.X[idx[:x.size(0)]])
+            z_prior = reparameterize_gaussian(torch.zeros(qz_m.shape), torch.ones(qz_v.shape))
+            l_prior = reparameterize_gaussian(torch.zeros(ql_m.shape), torch.ones(ql_v.shape))
         _, _, x_fake, x_dropout, _ = self.decoder(self.dispersion, z_prior, l_prior, batch_index, y)
         _, _, z_rec = self.z_encoder(x_fake, y)
             
         z_rec_loss = l1loss(z_rec, z_prior)
         #z_rec_loss = FLOAT([0])
             
-            
+           
+        #print('cuda', self.use_cuda, valid.shape, self.discriminator(px_rate), valid)
         # GAN loss
         #print('train g', px_rate.shape, torch.min(px_rate), torch.max(px_rate), valid.shape, torch.min(valid), torch.max(valid))
         g_loss = adversarial_loss(self.discriminator(px_rate), valid)# + adversarial_loss(self.discriminator(x_fake), valid)

@@ -23,8 +23,6 @@ from torch.utils.data.sampler import (
     RandomSampler,
 )
 
-FLOAT = torch.cuda.FloatTensor
-
 def _freeze(*args):
     for module in args:
         if module:
@@ -42,7 +40,7 @@ class SequentialSubsetSampler(SubsetRandomSampler):
         return iter(self.indices)
                 
                 
-def get_latent(gene_dataset, model):
+def get_latent(gene_dataset, model, use_cuda):
     latent = []
     batch_indices = []
     labels = []
@@ -53,7 +51,10 @@ def get_latent(gene_dataset, model):
     
     for tensors in data_loader:
         sample_batch, local_l_mean, local_l_var, batch_index, label = tensors
-        latent += [model.sample_from_posterior_z(sample_batch.cuda(), give_mean=True).cpu()]
+        if use_cuda:
+            latent += [model.sample_from_posterior_z(sample_batch.cuda(), give_mean=True).cpu()]
+        else:
+            latent += [model.sample_from_posterior_z(sample_batch, give_mean=True).cpu()]
     return np.array(torch.cat(latent).detach())
 
 
