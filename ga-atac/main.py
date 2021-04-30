@@ -52,9 +52,7 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, min_pea
     d = SingleCellDataset(X, peaks, cells, low=min_cells, high=max_cells, min_peaks=min_peaks)
     labels = [labels[i] for i in d.barcode if labels is not None]
     tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]
-    print('labels', labels, tlabels)
     gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)   
-    print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min())
     
     model = GAATAC(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
              n_hidden=n_hidden, n_latent=n_latent, dropout_rate=0, reconst_ratio=ratio, use_cuda=use_cuda)

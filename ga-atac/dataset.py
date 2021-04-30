@@ -149,7 +149,7 @@ class GeneExpressionDataset(Dataset):
         )
         
         #initialize_cell_attribute(self, attribute_name, attribute, categorical=False):
-        print('populate_from_data', np.asarray(labels).shape, self.nb_cells)
+        #print('populate_from_data', np.asarray(labels).shape, self.nb_cells)
         self.initialize_cell_attribute(
             "labels",
             np.asarray(labels).reshape((-1, 1))

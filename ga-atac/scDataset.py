@@ -69,7 +69,7 @@ class SCDataset(DownloadableDataset):
             
             
 
-        print('labels', self.ylabels, self.cell_types, batch_indices, gene_names)
+        #print('labels', self.ylabels, self.cell_types, batch_indices, gene_names)
         self.populate_from_data(
             X=self.mat,
             batch_indices=batch_indices,
