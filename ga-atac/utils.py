@@ -103,8 +103,8 @@ def clustering_scores(latent, cells, labels, dataset, tlabels, n_hidden, n_laten
         
         with open('result/%s/%s-%d-%d-%d-cluster_result.csv'%(dataset, dataset, n_hidden, n_latent, louvain_num), 'w') as f:
             f.write('cell,predicted label,tsne-1,tsne-2\n')
-            for cell, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
-                f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
+            for cell, pred, t in zip(cells, labels_pred, tsne):
+                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
 
 
         
@@ -139,7 +139,6 @@ def show_tsne(tsne, labels, filename, tlabels=None):
         vis_y1 = tsne[indexes, 1]
         c = colors[i]
 
-        print('show_tsne', tlabels)
         if tlabels is None:
             sc = plt.scatter(vis_x1, vis_y1, c=c, marker='.', cmap='hsv', label=y)
         else:
