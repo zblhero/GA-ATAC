@@ -147,9 +147,6 @@ class GeneExpressionDataset(Dataset):
             else np.zeros((X.shape[0], 1)),
             categorical=True,
         )
-        
-        #initialize_cell_attribute(self, attribute_name, attribute, categorical=False):
-        #print('populate_from_data', np.asarray(labels).shape, self.nb_cells)
         self.initialize_cell_attribute(
             "labels",
             np.asarray(labels).reshape((-1, 1))

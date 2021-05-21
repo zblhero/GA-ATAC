@@ -58,7 +58,7 @@ def get_latent(gene_dataset, model, use_cuda):
     return np.array(torch.cat(latent).detach())
 
 
-def clustering_scores(latent, cells, labels, dataset, tlabels, n_hidden, n_latent, louvain_num, seed=42):
+'''def clustering_scores(latent, cells, labels, dataset, tlabels, n_hidden, n_latent, louvain_num, seed=42):
 
     from scipy.spatial import distance
     
@@ -89,12 +89,13 @@ def clustering_scores(latent, cells, labels, dataset, tlabels, n_hidden, n_laten
         
         vec = latent
         tsne = TSNE(random_state=seed).fit_transform(vec)
-        show_tsne(tsne, labels_pred, 'result/%s/%s-%d-%d-%d-pred.png'%(dataset, dataset, n_hidden, n_latent, louvain_num), tlabels=tlabels) 
-        
+        show_tsne(tsne, labels_pred, 'result/%s/%s-%d-%d-%d-pred.png'%(dataset, dataset, n_hidden, n_latent, louvain_num)) 
+        show_tsne(tsne, labels, 'result/%s/%s-%d-%d-%d-true.png'%(dataset, dataset, n_hidden, n_latent, louvain_num))
+                
         with open('result/%s/%s-%d-%d-%d-cluster_result.csv'%(dataset, dataset, n_hidden, n_latent, louvain_num), 'w') as f:
-            f.write('cell,predicted label,tsne-1,tsne-2\n')
-            for cell, pred, t in zip(cells, labels_pred, tsne):
-                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
+            f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
+            for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
+                f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
         return asw_score, nmi_score, ari_score, uca_score
     else:
         vec = latent
@@ -104,7 +105,7 @@ def clustering_scores(latent, cells, labels, dataset, tlabels, n_hidden, n_laten
         with open('result/%s/%s-%d-%d-%d-cluster_result.csv'%(dataset, dataset, n_hidden, n_latent, louvain_num), 'w') as f:
             f.write('cell,predicted label,tsne-1,tsne-2\n')
             for cell, pred, t in zip(cells, labels_pred, tsne):
-                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
+                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))'''
 
 
         
@@ -171,6 +172,44 @@ def log_nb_positive(x, mu, theta, eps=1e-8):
         - torch.lgamma(x + 1)
     )
     return torch.sum(res, dim=-1)
+
+def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_num=15, prediction_algorithm="knn", X_tf=None, ensemble=False, batch_indices=None, save_cluster=False, seed=42):
+    from scipy.spatial import distance
+
+
+    vec = latent
+    mat = kneighbors_graph(latent, louvain_num, mode='distance', include_self=True).todense()
+
+    G = nx.from_numpy_matrix(mat)
+    partition = community.best_partition(G, random_state=seed)
+
+    labels_pred = []
+    for i in range(mat.shape[0]):
+        labels_pred.append(partition[i])
+
+    labels_pred = np.array(labels_pred)
+
+    tsne = TSNE(random_state=seed).fit_transform(vec)  
+    print('pred labels is', labels_pred.shape, np.max(labels_pred), vec[0,:5], tsne[:5], labels_pred[:100])
+    show_tsne(tsne, labels_pred, 'result/%s/%s-GMVAE-%s-%s-pred.png'%(dataset, suffix, 'alpha-gan', ensemble))
+    np.savetxt('result/%s/labels.txt'%(dataset), labels_pred)
+
+    #if labels is not None:   
+    if True:
+        show_tsne(tsne, labels, 'result/%s/%s-GMVAE-%s-%s-true.png'%(dataset, suffix, 'alpha-gan', ensemble), tlabels=tlabels)
+        with open('data/%s-cluster_result.csv'%(dataset), 'w') as f:
+            f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
+            for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
+                f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
+
+        print(labels, labels_pred, latent)
+        #asw_score = silhouette_score(latent, labels)
+        asw_score = 0
+        nmi_score = NMI(labels, labels_pred)
+        ari_score = ARI(labels, labels_pred)
+        print("Clustering Scores:\nSilhouette: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f"%(asw_score, nmi_score, ari_score, 0))
+
+    return asw_score, nmi_score, ari_score, 0
 
 
 

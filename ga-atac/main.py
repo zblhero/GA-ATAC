@@ -4,9 +4,10 @@ import numpy as np
 import pandas as pd
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-from trainer import UnsupervisedTrainer
+#from trainer import UnsupervisedTrainer
 #from train import train
 from datasetfilter import SingleCellDataset
+from trainer import UnsupervisedTrainer
 
 import torch
 from scDataset import SCDataset
@@ -53,7 +54,8 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, min_pea
     labels = [labels[i] for i in d.barcode if labels is not None]
     tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]
     gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)   
-    print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min())
+    print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min(), np.sum(gene_dataset.X))
+    print('labels', labels)
     
     model = GAATAC(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
              n_hidden=n_hidden, n_latent=n_latent, dropout_rate=0, reconst_ratio=ratio, use_cuda=use_cuda)
@@ -64,18 +66,18 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, min_pea
         gene_dataset,
         train_size=1.0,
         use_cuda=use_cuda,
-        frequency=5
+        frequency=5,
+        reconstruction_loss=model.reconstruction_loss
     )
     model_name = '%s/%s-%d-%d.pkl'%(save_path, dataset, n_hidden, n_latent)
     
 
     trainer.train(n_epochs=n_epochs)
-    #torch.save(trainer.model.state_dict(), model_name)
-        
     latent = get_latent(gene_dataset, trainer.model, use_cuda)
     
     print('get clustering', n_hidden, n_latent, louvain_num)
-    clustering_scores(latent, cells, labels, dataset, gene_dataset.tlabels, n_hidden, n_latent, louvain_num, seed)
+    clustering_scores(latent, labels, cells, dataset, '', gene_dataset.tlabels, 
+                               prediction_algorithm='louvain', X_tf=gene_dataset.X, ensemble=None, louvain_num=louvain_num)#, batch_indices=batch_labels)
      
     
 params = {
@@ -96,9 +98,9 @@ params = {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='GA-ATAC: Generative Adversarial ATAC-seq Analysis')
     parser.add_argument('--dataset', type=str)
-    parser.add_argument('--n_hidden', type=int, help='hidden unit number', default=128)
-    parser.add_argument('--n_latent', type=int, help='latent size', default=16)
-    parser.add_argument('--n_louvain', type=int, help='louvain number', default=30)
+    parser.add_argument('--n_hidden', type=int, help='hidden unit number', default=1024)
+    parser.add_argument('--n_latent', type=int, help='latent size', default=10)
+    parser.add_argument('--n_louvain', type=int, help='louvain number', default=50)
     parser.add_argument('--seed', type=int, default=6, help='Random seed for repeat results')
     parser.add_argument('--gpu', default=0, type=int, help='Select gpu device number when training')
     parser.add_argument('--min_peaks', type=float, default=100, help='Remove low quality cells with few peaks')

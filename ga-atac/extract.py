@@ -5,7 +5,7 @@ from scipy.sparse import csc_matrix, coo_matrix
 import gc
 import os, os.path
 import pysam
-from datasets.cortex import CortexDataset
+#from datasets.cortex import CortexDataset
 
 
 def read_barcodes(filename='/GSE99172/GSE99172_barcode.txt'):
@@ -90,16 +90,16 @@ def load_data(filename):
 
 
 def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean'):
-    dirname = '/../data/%s/'%(dataset) 
+    dirname = '/../../scATAC/data/%s/'%(dataset) 
     
-    peaks = read_pos(dirname+'%s_peaks.txt'%(dataset))
-    cells = read_barcodes(dirname+'%s_barcodes.txt'%(dataset))
+    peaks = read_pos(dirname+'%s_peak.bed'%(dataset))
+    cells = read_barcodes(dirname+'%s_barcode.txt'%(dataset))
     
     if is_labeled:
         labels, cell_types, tlabels = read_labels(dirname+'%s_celltype_info.csv'%(dataset), cells, dataset)
     else:
         labels, cell_types, tlabels = None, None, None
-    X = load_data(dirname+'%s_downloadSparseMatrix.txt'%(dataset))
+    X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset))
     
     return X, cells, peaks, labels, cell_types, tlabels
     
