@@ -13,7 +13,7 @@ def read_barcodes(filename='/GSE99172/GSE99172_barcode.txt'):
     
     with open(os.path.dirname(__file__) +filename) as f:
         for line in f.readlines():
-            cell = line.strip('\n').replace('"', '')
+            cell = line.strip('\n').replace('"', '').split(',')[0]
             cells.append(cell)
     return cells
 
@@ -92,15 +92,21 @@ def load_data(filename):
 def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean'):
     dirname = '/../../scATAC/data/%s/'%(dataset) 
     
-    peaks = read_pos(dirname+'%s_peak.bed'%(dataset))
+    X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset))
+    
+    
+    try:
+        peaks = read_pos(dirname+'%s_peak.bed'%(dataset))
+    except FileNotFoundError:
+        peaks = range(X.shape[1])
     cells = read_barcodes(dirname+'%s_barcode.txt'%(dataset))
     
     if is_labeled:
         labels, cell_types, tlabels = read_labels(dirname+'%s_celltype_info.csv'%(dataset), cells, dataset)
     else:
         labels, cell_types, tlabels = None, None, None
-    X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset))
     
+    print(X.shape, len(peaks), len(cells))
     return X, cells, peaks, labels, cell_types, tlabels
     
 

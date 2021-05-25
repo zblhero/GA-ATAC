@@ -6,9 +6,12 @@ import os, os.path
 
 import numpy as np
 from matplotlib import pyplot as plt
+import leidenalg
+import igraph as ig
 
 from sklearn.neighbors import NearestNeighbors, KNeighborsRegressor
-from scipy.optimize import linear_sum_assignment as linear_assignment
+#from scipy.optimize import linear_sum_assignment as linear_assignment
+from sklearn.utils.linear_assignment_ import linear_assignment
 from sklearn.neighbors import kneighbors_graph
 from sklearn.manifold import TSNE
 
@@ -122,7 +125,7 @@ def unsupervised_clustering_accuracy(y, y_pred):
             reward_matrix[mapping[y_pred_], mapping[y_]] += 1
     cost_matrix = reward_matrix.max() - reward_matrix
     ind = linear_assignment(cost_matrix)
-    return sum([reward_matrix[i, j] for i, j in ind]) * 1.0 / y_pred.size, ind
+    return sum([reward_matrix[i, j] for i, j in ind]) * 1.0 / y_pred.size
 
 def show_tsne(tsne, labels, filename, tlabels=None):
     n_components = len(np.unique(labels))
@@ -179,13 +182,26 @@ def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_n
 
     vec = latent
     mat = kneighbors_graph(latent, louvain_num, mode='distance', include_self=True).todense()
+    print('mat', mat.shape)
 
-    G = nx.from_numpy_matrix(mat)
-    partition = community.best_partition(G, random_state=seed)
-
-    labels_pred = []
-    for i in range(mat.shape[0]):
-        labels_pred.append(partition[i])
+    
+    
+    alg = 'louvain'
+    if alg == 'louvain':
+        labels_pred = []
+        G = nx.from_numpy_matrix(mat)
+        partition = community.best_partition(G, random_state=seed)
+        for i in range(mat.shape[0]):
+            labels_pred.append(partition[i])
+    elif alg == 'leiden':
+        vcount = max(mat.shape)
+        sources, targets = mat.nonzero()
+        edgelist = zip(sources.tolist(), targets.tolist())
+        g = ig.Graph(vcount, edgelist)
+        partition = leidenalg.find_partition(g, leidenalg.ModularityVertexPartition)
+        print(partition.membership)
+        
+        labels_pred = partition.membership
 
     labels_pred = np.array(labels_pred)
 
@@ -202,12 +218,14 @@ def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_n
             for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
                 f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
 
-        print(labels, labels_pred, latent)
+        #print(labels, labels_pred, latent)
         #asw_score = silhouette_score(latent, labels)
         asw_score = 0
         nmi_score = NMI(labels, labels_pred)
         ari_score = ARI(labels, labels_pred)
-        print("Clustering Scores:\nSilhouette: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f"%(asw_score, nmi_score, ari_score, 0))
+        homo_score = homogeneity_score(labels, labels_pred) 
+        uca_score = unsupervised_clustering_accuracy(labels, labels_pred)
+        print("Clustering Scores:\nHOMO: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f"%(homo_score, nmi_score, ari_score, uca_score))
 
     return asw_score, nmi_score, ari_score, 0
 
