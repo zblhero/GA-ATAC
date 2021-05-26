@@ -57,7 +57,7 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]
     gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)   
     print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min(), np.sum(gene_dataset.X))
-    print('labels', labels)
+    print('labels', len(labels))
     
     model = GAATAC(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
              n_hidden=n_hidden, n_latent=n_latent, dropout_rate=dropout, reconst_ratio=ratio, use_cuda=use_cuda)
@@ -82,7 +82,7 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     #for louvain_num in [100]:
     print('louvain_num', louvain_num)
     clustering_scores(latent, labels, cells, dataset, '%d-%d-%d'%(n_hidden, n_latent, louvain_num), gene_dataset.tlabels, 
-                       prediction_algorithm='louvain', X_tf=gene_dataset.X, ensemble=None, louvain_num=louvain_num)#, batch_indices=batch_labels)
+                   prediction_algorithm='louvain', X_tf=gene_dataset.X, ensemble=None, louvain_num=louvain_num)#, batch_indices=batch_labels)
      
     
 params = {

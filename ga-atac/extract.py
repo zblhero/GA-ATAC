@@ -67,24 +67,23 @@ def read_pos(filename):
             peaks.append((key, start, end))
     return peaks
 
-def load_data(filename):
+def load_data(filename, cell_num):
     #if '65361' in filename:
     #    return np.load(os.path.dirname(__file__)+filename)
     row, col, data = [], [], []
     with open(os.path.dirname(__file__)+filename) as f:
         for line in f.readlines():
             values = line.strip('\n').split()
-            #values = line.strip('\n').split('\t')
-            #print(values)
             if len(values) != 3:
                 continue
             try:
-                col.append(int(values[0]))
-                row.append(int(values[1])-1)
-                data.append(int(values[2]))
+                if int(values[1])-1 < cell_num:
+                    col.append(int(values[0]))
+                    row.append(int(values[1])-1)
+                    data.append(int(values[2]))
             except ValueError:
                 print(line)
-    print('load data', len(data), len(row), len(col))
+    print('load data', len(data), len(row), len(col), np.unique(row), np.unique(col))
     X = coo_matrix((data, (row, col))).toarray()
     return X
 
@@ -92,19 +91,23 @@ def load_data(filename):
 def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean'):
     dirname = '/../../scATAC/data/%s/'%(dataset) 
     
-    X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset))
     
+    cells = read_barcodes(dirname+'%s_barcode.txt'%(dataset))
+    X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset), len(cells))
     
     try:
         peaks = read_pos(dirname+'%s_peak.bed'%(dataset))
     except FileNotFoundError:
         peaks = range(X.shape[1])
-    cells = read_barcodes(dirname+'%s_barcode.txt'%(dataset))
+    
     
     if is_labeled:
         labels, cell_types, tlabels = read_labels(dirname+'%s_celltype_info.csv'%(dataset), cells, dataset)
     else:
         labels, cell_types, tlabels = None, None, None
+    
+    
+    
     
     print(X.shape, len(peaks), len(cells))
     return X, cells, peaks, labels, cell_types, tlabels

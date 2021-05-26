@@ -149,7 +149,7 @@ def show_tsne(tsne, labels, filename, tlabels=None):
             sc = plt.scatter(vis_x1, vis_y1, c=c, marker='.', cmap='hsv', label=tlabels[indexes[0]])
         
     ax.legend()
-    plt.clim(-0.5, 9.5)
+    #plt.clim(-0.5, 9.5)
     plt.savefig(filename)
     plt.clf()
 
@@ -207,13 +207,19 @@ def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_n
 
     tsne = TSNE(random_state=seed).fit_transform(vec)  
     print('pred labels is', labels_pred.shape, np.max(labels_pred), vec[0,:5], tsne[:5], labels_pred[:100])
+    print('labels is', np.array(labels).shape)
     show_tsne(tsne, labels_pred, 'result/%s/%s-GMVAE-%s-%s-pred.png'%(dataset, suffix, 'alpha-gan', ensemble))
     np.savetxt('result/%s/labels.txt'%(dataset), labels_pred)
 
     #if labels is not None:   
-    if True:
+    if len(labels) == 0:
+        with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
+            f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
+            for cell, pred, t in zip(cells, labels_pred, tsne):
+                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
+    else:
         show_tsne(tsne, labels, 'result/%s/%s-GMVAE-%s-%s-true.png'%(dataset, suffix, 'alpha-gan', ensemble), tlabels=tlabels)
-        with open('data/%s-cluster_result.csv'%(dataset), 'w') as f:
+        with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
             f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
             for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
                 f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
@@ -227,7 +233,7 @@ def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_n
         uca_score = unsupervised_clustering_accuracy(labels, labels_pred)
         print("Clustering Scores:\nHOMO: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f"%(homo_score, nmi_score, ari_score, uca_score))
 
-    return asw_score, nmi_score, ari_score, 0
+        return asw_score, nmi_score, ari_score, 0
 
 
 

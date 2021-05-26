@@ -383,28 +383,10 @@ class GAATAC(nn.Module):
             if self.gan_loss == 'gan':
                 g_loss = adversarial_loss(self.discriminator(px_rate), valid) + adversarial_loss(self.discriminator(x_fake), valid)
                 d_loss = adversarial_loss(self.discriminator(x), valid) +  adversarial_loss(self.discriminator(px_rate), fake) + adversarial_loss(self.discriminator(x_fake), fake)
-                '''print('reconst:', torch.mean(reconst_loss).detach().cpu().numpy(), 
-                    'kl l', torch.mean(kl_divergence_l).detach().cpu().numpy(),
-                    'kl z:', torch.mean(kl_divergence_z).detach().cpu().numpy(),
-                    'd_real:', adversarial_loss(self.discriminator(x), valid).detach().cpu().numpy(), 
-                    'd_fake_prior:', adversarial_loss(self.discriminator(x_fake), fake).detach().cpu().numpy(), 
-                    'd_fake_post:', adversarial_loss(self.discriminator(px_rate), fake).detach().cpu().numpy(), 
-                    'g_prior',adversarial_loss(self.discriminator(x_fake), valid).detach().cpu().numpy(),
-                    'g_post',adversarial_loss(self.discriminator(px_rate), valid).detach().cpu().numpy(),
-                    'z_rec', z_rec_loss.detach().cpu().numpy())'''
                 
             elif self.gan_loss == 'wgan':
                 g_loss = -(self.discriminator(px_rate)+_eps).mean() -(self.discriminator(x_fake)+_eps).mean()    
                 d_loss = -(self.discriminator(x) + _eps).mean() - (1 - self.discriminator(x_fake) + _eps).mean() - (1 - self.discriminator(px_rate) + _eps).mean() + self.gradient_penalty(self.discriminator, x, px_rate)
-                '''print('reconst:', torch.mean(reconst_loss).detach().cpu().numpy(), 
-                    'kl l', torch.mean(kl_divergence_l).detach().cpu().numpy(),
-                    'kl z:', torch.mean(kl_divergence_z).detach().cpu().numpy(),
-                    'd_real:', -(self.discriminator(x) + _eps).mean().detach().cpu().numpy(), 
-                    'd_fake_prior:', - (1 - self.discriminator(x_fake) + _eps).mean().detach().cpu().numpy(), 
-                    'd_fake_post:', - (1 - self.discriminator(px_rate) + _eps).mean().detach().cpu().numpy(), 
-                    'g_prior',-(self.discriminator(x_fake)+_eps).mean().detach().cpu().numpy(),
-                    'g_post',-(self.discriminator(px_rate)+_eps).mean().detach().cpu().numpy(),
-                    'z_rec', z_rec_loss.detach().cpu().numpy())'''
             
             return self.reconst_ratio*reconst_loss, kl_divergence_l+kl_divergence_z, g_loss, d_loss, z_rec_loss
         return reconst_loss, kl_divergence_l+kl_divergence_z
