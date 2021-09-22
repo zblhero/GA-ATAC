@@ -85,11 +85,14 @@ def load_data(filename, cell_num):
                 print(line)
     print('load data', len(data), len(row), len(col), np.unique(row), np.unique(col))
     X = coo_matrix((data, (row, col))).toarray()
+    del data
+    del row
+    del col
     return X
 
 
 def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean'):
-    dirname = '/../../scATAC/data/%s/'%(dataset) 
+    dirname = '/../data/%s/'%(dataset) 
     
     
     cells = read_barcodes(dirname+'%s_barcode.txt'%(dataset))

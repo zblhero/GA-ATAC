@@ -17,7 +17,8 @@ from torch.autograd import grad as torch_grad
 import torch.nn.functional as F
 
 torch.backends.cudnn.benchmark = True
-FLOAT = torch.cuda.FloatTensor
+use_cuda = torch.cuda.is_available()
+FLOAT = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 adversarial_loss = torch.nn.BCELoss()
 l1loss = torch.nn.L1Loss()
 
@@ -369,11 +370,18 @@ class GAATAC(nn.Module):
             x_real = FLOAT(self.X[idx[:x.size(0)]])
             
             # generate sample from random priors
-            z_prior = reparameterize_gaussian(torch.zeros(qz_m.shape).cuda(), torch.ones(qz_v.shape).cuda())
-            l_prior = reparameterize_gaussian(torch.zeros(ql_m.shape).cuda(), torch.ones(ql_v.shape).cuda())
-            _, _, x_fake, x_dropout, _ = self.decoder(self.dispersion, z_prior, l_prior, batch_index, y)
-            _, _, z_rec = self.z_encoder(x_fake, y)
-            x_fake = Normal(torch.zeros(x.shape), torch.ones(x.shape)).rsample().cuda()
+            if use_cuda:
+                z_prior = reparameterize_gaussian(torch.zeros(qz_m.shape).cuda(), torch.ones(qz_v.shape).cuda())
+                l_prior = reparameterize_gaussian(torch.zeros(ql_m.shape).cuda(), torch.ones(ql_v.shape).cuda())
+                _, _, x_fake, x_dropout, _ = self.decoder(self.dispersion, z_prior, l_prior, batch_index, y)
+                _, _, z_rec = self.z_encoder(x_fake, y)
+                x_fake = Normal(torch.zeros(x.shape), torch.ones(x.shape)).rsample().cuda()
+            else:
+                z_prior = reparameterize_gaussian(torch.zeros(qz_m.shape), torch.ones(qz_v.shape))
+                l_prior = reparameterize_gaussian(torch.zeros(ql_m.shape), torch.ones(ql_v.shape))
+                _, _, x_fake, x_dropout, _ = self.decoder(self.dispersion, z_prior, l_prior, batch_index, y)
+                _, _, z_rec = self.z_encoder(x_fake, y)
+                x_fake = Normal(torch.zeros(x.shape), torch.ones(x.shape)).rsample()
             
             z_rec_loss = l1loss(z_rec, z_prior)
             #z_rec_loss = FLOAT([0])

@@ -49,13 +49,16 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
         use_cuda = False
     
     X, cells, peaks, labels, cell_types, tlabels, = extract.extract_simulated(dataset, is_labeled)   # downloaded 
+    
     if binary:
-        X = np.where(X>0, 1, 0) 
+        X = np.where(X>0, 1, 0)   # out of memory
     
     d = SingleCellDataset(X, peaks, cells, low=min_cells, high=max_cells, min_peaks=min_peaks)
+    del X
     labels = [labels[i] for i in d.barcode if labels is not None]
     tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]
-    gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)   
+    gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)  # out of memory 
+    del d 
     print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min(), np.sum(gene_dataset.X))
     print('labels', len(labels))
     
@@ -114,11 +117,12 @@ if __name__ == "__main__":
     parser.add_argument('--n_epochs', type=int, default=1000, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--dropout', type=float, default=0.0, help='dropout in the fc layer')
-    parser.add_argument('--binary', type=bool, default=True, help='binarize the data')
+    parser.add_argument('--binary', type=int, default=1, help='binarize the data')
     parser.add_argument('--labeled', type=int, default=1, help='has label data (cell type file)') # 1 stands for existing of celltype file
     
 
     args = parser.parse_args()    
+    print('binary1', args.binary)
     cluster(args.dataset, args.n_hidden, args.n_latent, args.n_louvain, 
             seed=args.seed, min_peaks=args.min_peaks, min_cells=args.min_cells, max_cells=args.max_cells, 
             dropout=args.dropout, binary=args.binary, n_epochs=args.n_epochs,

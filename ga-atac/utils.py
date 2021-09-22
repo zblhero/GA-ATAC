@@ -10,8 +10,8 @@ import leidenalg
 import igraph as ig
 
 from sklearn.neighbors import NearestNeighbors, KNeighborsRegressor
-#from scipy.optimize import linear_sum_assignment as linear_assignment
-from sklearn.utils.linear_assignment_ import linear_assignment
+from scipy.optimize import linear_sum_assignment as linear_assignment
+#from sklearn.utils.linear_assignment_ import linear_assignment
 from sklearn.neighbors import kneighbors_graph
 from sklearn.manifold import TSNE
 
