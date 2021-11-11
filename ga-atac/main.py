@@ -11,11 +11,10 @@ from trainer import UnsupervisedTrainer
 
 import torch
 from scDataset import SCDataset
-from model import *
+from GAATAC import *
 import pickle
 import random
 import torchsummary
-from torchvision.models.resnet import *
 
 from utils import *
 import extract
@@ -36,11 +35,12 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
     
-def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, 
+def cluster(args, dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, 
             min_peaks=100, min_cells=0.05, max_cells=0.95, dropout=0.0, binary=True, n_epochs=1000, 
             is_labeled=True, gpu=-1):
     set_seed(seed)
     use_batches = False
+    n_batch_gan = 0
     
     if gpu >= 0:
         os.environ["CUDA_VISIBLE_DEVICES"] = "%d"%(gpu)
@@ -48,7 +48,7 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     else:
         use_cuda = False
     
-    X, cells, peaks, labels, cell_types, tlabels, = extract.extract_simulated(dataset, is_labeled)   # downloaded 
+    X, cells, peaks, labels, cell_types, tlabels, batches = extract.extract_simulated(dataset, is_labeled = is_labeled, batch = args.batch)   # downloaded 
     
     if binary:
         X = np.where(X>0, 1, 0)   # out of memory
@@ -57,13 +57,14 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     del X
     labels = [labels[i] for i in d.barcode if labels is not None]
     tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]
+    batches = [batches[i] for i in d.barcode if batches is not None]
     gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)  # out of memory 
     del d 
-    print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min(), np.sum(gene_dataset.X))
+    print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min())
     print('labels', len(labels))
     
     model = GAATAC(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
-             n_hidden=n_hidden, n_latent=n_latent, dropout_rate=dropout, reconst_ratio=ratio, use_cuda=use_cuda)
+             n_hidden=n_hidden, n_latent=n_latent, dropout_rate=dropout, reconst_ratio=ratio, use_cuda=use_cuda, n_batch_gan=2)
     if use_cuda:
         model.cuda()
     trainer = UnsupervisedTrainer(
@@ -81,11 +82,15 @@ def cluster(dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     latent = get_latent(gene_dataset, trainer.model, use_cuda)
     
     print('get clustering', n_hidden, n_latent, louvain_num)
-    #for louvain_num in [10, 20, 30, 50, 100, 150, 200, 400]:
+    for louvain_num in [30]:
     #for louvain_num in [100]:
-    print('louvain_num', louvain_num)
-    clustering_scores(latent, labels, cells, dataset, '%d-%d-%d'%(n_hidden, n_latent, louvain_num), gene_dataset.tlabels, 
-                   prediction_algorithm='louvain', X_tf=gene_dataset.X, ensemble=None, louvain_num=louvain_num)#, batch_indices=batch_labels)
+        print('louvain_num', louvain_num)
+        if use_batches:
+            batch_indices = batches
+        else:
+            batch_indices = None
+        clustering_scores(args, latent, labels, cells, dataset, '%d-%d-%d'%(n_hidden, n_latent, louvain_num), gene_dataset.tlabels, 
+                       prediction_algorithm='louvain', X_tf=gene_dataset.X, ensemble=None, louvain_num=louvain_num, batch_indices=batch_indices)
      
     
 params = {
@@ -118,12 +123,13 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--dropout', type=float, default=0.0, help='dropout in the fc layer')
     parser.add_argument('--binary', type=int, default=1, help='binarize the data')
+    parser.add_argument('--batch', type=int, default=0, help='if the data has batch')
+    parser.add_argument('--plot', type=str, default='umap', help='tsne, umap')
     parser.add_argument('--labeled', type=int, default=1, help='has label data (cell type file)') # 1 stands for existing of celltype file
     
 
     args = parser.parse_args()    
-    print('binary1', args.binary)
-    cluster(args.dataset, args.n_hidden, args.n_latent, args.n_louvain, 
+    cluster(args, args.dataset, args.n_hidden, args.n_latent, args.n_louvain, 
             seed=args.seed, min_peaks=args.min_peaks, min_cells=args.min_cells, max_cells=args.max_cells, 
             dropout=args.dropout, binary=args.binary, n_epochs=args.n_epochs,
             is_labeled=args.labeled, gpu=args.gpu)

@@ -8,6 +8,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import leidenalg
 import igraph as ig
+import umap
 
 from sklearn.neighbors import NearestNeighbors, KNeighborsRegressor
 from scipy.optimize import linear_sum_assignment as linear_assignment
@@ -25,6 +26,10 @@ from torch.utils.data.sampler import (
     SubsetRandomSampler,
     RandomSampler,
 )
+
+use_cuda = torch.cuda.is_available()
+FLOAT = torch.cuda.FloatTensor
+LONG = torch.cuda.LongTensor
 
 def _freeze(*args):
     for module in args:
@@ -61,56 +66,14 @@ def get_latent(gene_dataset, model, use_cuda):
     return np.array(torch.cat(latent).detach())
 
 
-'''def clustering_scores(latent, cells, labels, dataset, tlabels, n_hidden, n_latent, louvain_num, seed=42):
-
-    from scipy.spatial import distance
-    
-    mat = kneighbors_graph(latent, louvain_num, mode='distance', include_self=True).todense()
-    G = nx.from_numpy_matrix(mat)
-    partition = community.best_partition(G, random_state=seed)
-
-    labels_pred = []
-    for i in range(mat.shape[0]):
-        labels_pred.append(partition[i])
-
-    labels_pred = np.array(labels_pred)
-    
-    if not os.path.exists('result/%s'%(dataset)):
-        os.mkdir('result/%s'%(dataset))
-                    
-    if len(labels) > 0:
+def batch_removal(X, batchids):
+    for b in [0, 1, 2]:
+        indices = [i for i in range(X.shape[0]) if int(batchids[i])==b]
+        T = X[indices][:]
         
-        asw_score = silhouette_score(latent, labels)
-        nmi_score = NMI(labels, labels_pred)
-        ari_score = ARI(labels, labels_pred)
-        homo_score = homogeneity_score(labels, labels_pred) 
-        #uca_score = unsupervised_clustering_accuracy(labels, labels_pred)[0]
-        uca_score = 0
-
-        print("Clustering Scores:\nSilhouette: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f\nHOMO:%.4f"
-                        % (asw_score, nmi_score, ari_score, uca_score, homo_score))
-        
-        vec = latent
-        tsne = TSNE(random_state=seed).fit_transform(vec)
-        show_tsne(tsne, labels_pred, 'result/%s/%s-%d-%d-%d-pred.png'%(dataset, dataset, n_hidden, n_latent, louvain_num)) 
-        show_tsne(tsne, labels, 'result/%s/%s-%d-%d-%d-true.png'%(dataset, dataset, n_hidden, n_latent, louvain_num))
-                
-        with open('result/%s/%s-%d-%d-%d-cluster_result.csv'%(dataset, dataset, n_hidden, n_latent, louvain_num), 'w') as f:
-            f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
-            for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
-                f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
-        return asw_score, nmi_score, ari_score, uca_score
-    else:
-        vec = latent
-        tsne = TSNE(random_state=seed).fit_transform(vec)
-        show_tsne(tsne, labels_pred, 'result/%s/%s-%d-%d-%d-pred.png'%(dataset, dataset, n_hidden, n_latent, louvain_num), tlabels=None) 
-        
-        with open('result/%s/%s-%d-%d-%d-cluster_result.csv'%(dataset, dataset, n_hidden, n_latent, louvain_num), 'w') as f:
-            f.write('cell,predicted label,tsne-1,tsne-2\n')
-            for cell, pred, t in zip(cells, labels_pred, tsne):
-                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))'''
-
-
+        mean, std = np.mean(X[indices]), np.std(X[indices])        
+        X[indices] = (X[indices]-mean)/std
+    return X
         
 
 
@@ -127,21 +90,24 @@ def unsupervised_clustering_accuracy(y, y_pred):
     ind = linear_assignment(cost_matrix)
     return sum([reward_matrix[i, j] for i, j in ind]) * 1.0 / y_pred.size
 
-def show_tsne(tsne, labels, filename, tlabels=None):
+def show_tsne(embedding, labels, filename, tlabels=None):
     n_components = len(np.unique(labels))
     
-    vis_x = tsne[:, 0]
-    vis_y = tsne[:, 1]
-    colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'yellow', 'black', 'teal', 'plum', 'tan', 'bisque', 'beige', 'slategray', 'brown', 'darkred', 'salmon', 'coral', 'olive', 'lightpink', 'teal', 'darkcyan']
+    vis_x = embedding[:, 0]
+    vis_y = embedding[:, 1]
+    colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'yellow', 'black', 'teal', 'plum', 'tan', 'bisque', 'beige', 'slategray', 'brown', 'darkred', 'salmon', 'coral', 'olive', 'lightpink', 'teal', 'darkcyan', 'BlueViolet', 'CornflowerBlue', 'DarkKhaki', 'DarkTurquoise']
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     
     for i, y in enumerate(range(n_components)):
 
         indexes = [j for j in range(len(labels)) if labels[j]==y]
-        vis_x1 = tsne[indexes, 0]
-        vis_y1 = tsne[indexes, 1]
-        c = colors[i]
+        vis_x1 = embedding[indexes, 0]
+        vis_y1 = embedding[indexes, 1]
+        try: 
+            c = colors[i]
+        except IndexError:
+            c = colors[0]
 
         if tlabels is None:
             sc = plt.scatter(vis_x1, vis_y1, c=c, marker='.', cmap='hsv', label=y)
@@ -176,7 +142,7 @@ def log_nb_positive(x, mu, theta, eps=1e-8):
     )
     return torch.sum(res, dim=-1)
 
-def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_num=15, prediction_algorithm="knn", X_tf=None, ensemble=False, batch_indices=None, save_cluster=False, seed=42):
+def clustering_scores(args, latent, labels, cells, dataset, suffix, tlabels, louvain_num=15, prediction_algorithm="knn", X_tf=None, ensemble=False, batch_indices=None, save_cluster=False, seed=42):
     from scipy.spatial import distance
 
 
@@ -205,24 +171,38 @@ def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_n
 
     labels_pred = np.array(labels_pred)
 
-    tsne = TSNE(random_state=seed).fit_transform(vec)  
-    print('pred labels is', labels_pred.shape, np.max(labels_pred), vec[0,:5], tsne[:5], labels_pred[:100])
+    if args.plot == 'tsne':
+        embedding = TSNE(random_state=seed, perplexity=50).fit_transform(vec)  
+    elif args.plot == 'umap':
+        embedding = umap.UMAP(random_state=42).fit_transform(vec)  
+        
+        
+    print('pred labels is', labels_pred.shape, np.max(labels_pred), vec[0,:5], embedding[:5], labels_pred[:100])
     print('labels is', np.array(labels).shape)
-    show_tsne(tsne, labels_pred, 'result/%s/%s-GMVAE-%s-%s-pred.png'%(dataset, suffix, 'alpha-gan', ensemble))
+    show_tsne(embedding, labels_pred, 'result/%s/%s-GMVAE-%s-%s-pred.png'%(dataset, suffix, 'alpha-gan', ensemble))
     np.savetxt('result/%s/labels.txt'%(dataset), labels_pred)
 
     #if labels is not None:   
     if len(labels) == 0:
         with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
-            f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
-            for cell, pred, t in zip(cells, labels_pred, tsne):
+            f.write('cell,predicted label,tsne-1,tsne-2\n')
+            for cell, pred, t in zip(cells, labels_pred, embedding):
                 f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
+        if batch_indices is not None:
+            print('batch', batch_indices)
+            show_tsne(embedding, batch_indices, 'result/%s/%s-%s-batch.png'%(dataset, suffix, 'alpha-gan'), tlabels=batch_indices)
     else:
-        show_tsne(tsne, labels, 'result/%s/%s-GMVAE-%s-%s-true.png'%(dataset, suffix, 'alpha-gan', ensemble), tlabels=tlabels)
-        with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
-            f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
-            for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, tsne):
-                f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
+        show_tsne(embedding, labels, 'result/%s/%s-GMVAE-%s-%s-true.png'%(dataset, suffix, 'alpha-gan', ensemble), tlabels=tlabels)
+        if batch_indices is None:
+            with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
+                f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
+                for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, embedding):
+                    f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
+        else:
+            with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
+                f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2,batch\n')
+                for cell, label, tlabel, pred, t, batch in zip(cells, labels, tlabels, labels_pred, embedding, batch_indices):
+                    f.write('%s,%d,%s,%d,%f,%f,%d\n'%(cell, label, tlabel, pred, t[0], t[1], batch))
 
         #print(labels, labels_pred, latent)
         #asw_score = silhouette_score(latent, labels)
@@ -230,9 +210,11 @@ def clustering_scores(latent, labels, cells, dataset, suffix, tlabels, louvain_n
         nmi_score = NMI(labels, labels_pred)
         ari_score = ARI(labels, labels_pred)
         homo_score = homogeneity_score(labels, labels_pred) 
-        uca_score = unsupervised_clustering_accuracy(labels, labels_pred)
-        print("Clustering Scores:\nHOMO: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f"%(homo_score, nmi_score, ari_score, uca_score))
+        #uca_score = unsupervised_clustering_accuracy(labels, labels_pred)
+        print("Clustering Scores:\nHOMO: %.4f\nNMI: %.4f\nARI: %.4f\nUCA: %.4f"%(homo_score, nmi_score, ari_score, 0))
 
+        if batch_indices is not None:
+            show_tsne(embedding, batch_indices, 'result/%s/%s-%s-batch.png'%(dataset, suffix, 'alpha-gan'), tlabels=batch_indices)
         return asw_score, nmi_score, ari_score, 0
 
 

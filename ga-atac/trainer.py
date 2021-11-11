@@ -16,6 +16,7 @@ from torch.optim import RMSprop, Adam, SGD
 from tqdm import trange
 
 from posterior import Posterior
+from tensorboardX import SummaryWriter
 
 def _freeze(*args):
     for module in args:
@@ -36,25 +37,6 @@ logger = logging.getLogger(__name__)
 
 
 class Trainer:
-    r"""The abstract Trainer class for training a PyTorch model and monitoring its statistics. It should be
-    inherited at least with a .loss() function to be optimized in the training loop.
-
-    Args:
-        :model: A model instance from class ``VAE``, ``VAEC``, ``SCANVI``
-        :gene_dataset: A gene_dataset instance like ``CortexDataset()``
-        :use_cuda: Default: ``True``.
-        :metrics_to_monitor: A list of the metrics to monitor. If not specified, will use the
-            ``default_metrics_to_monitor`` as specified in each . Default: ``None``.
-        :benchmark: if True, prevents statistics computation in the training. Default: ``False``.
-        :frequency: The frequency at which to keep track of statistics. Default: ``None``.
-        :early_stopping_metric: The statistics on which to perform early stopping. Default: ``None``.
-        :save_best_state_metric:  The statistics on which we keep the network weights achieving the best store, and
-            restore them at the end of training. Default: ``None``.
-        :on: The data_loader name reference for the ``early_stopping_metric`` and ``save_best_state_metric``, that
-            should be specified if any of them is. Default: ``None``.
-        :show_progbar: If False, disables progress bar.
-        :seed: Random seed for train/test/validate split
-    """
     default_metrics_to_monitor = []
 
     def __init__(
@@ -70,7 +52,7 @@ class Trainer:
         data_loader_kwargs=None,
         show_progbar=True,
         seed=0,
-        reconstruction_loss='zinb'
+        reconstruction_loss='nb'
     ):
         # handle mutable defaults
         early_stopping_kwargs = (
@@ -85,6 +67,7 @@ class Trainer:
 
         self.data_loader_kwargs = {"batch_size": 128, "pin_memory": use_cuda}
         self.data_loader_kwargs.update(data_loader_kwargs)
+        self.writer = SummaryWriter('result/logs')
 
         self.weight_decay = weight_decay
         self.benchmark = benchmark
@@ -180,7 +163,7 @@ class Trainer:
                     loss = self.loss(*tensors_list)
                     
                     if self.reconstruction_loss == 'alpha-gan':
-                        reconst_loss, g_loss, d_loss, z_rec_loss = loss
+                        reconst_loss, g_loss, d_loss, z_rec_loss, g_batch_loss, d_batch_loss = loss
                         
                         if self.epoch > 0:
                             for _ in range(1):
@@ -190,7 +173,11 @@ class Trainer:
                                 self.model.decoder.requires_grad = True
                                 self.model.discriminator.requires_grad = False
                                 optimizer_eg.zero_grad()
-                                (reconst_loss+g_loss+z_rec_loss).backward(retain_graph=True)   # decoder to reconstruct
+                                if g_batch_loss is not None:
+                                    (reconst_loss + g_loss + z_rec_loss + g_batch_loss*100).backward(retain_graph=True)   # decoder to reconstruct
+                                    #(g_loss + g_batch_loss + z_rec_loss).backward(retain_graph=True) 
+                                else:
+                                    (reconst_loss+g_loss+z_rec_loss).backward(retain_graph=True)
                                 optimizer_eg.step()
                             
                         if self.epoch > 0:
@@ -201,11 +188,20 @@ class Trainer:
                                 self.model.decoder.requires_grad = False
                                 self.model.discriminator.requires_grad = True
                                 optimizer_d.zero_grad()
-                                (d_loss).backward()    # discriminate between fake and real
+                                if d_batch_loss is not None:
+                                    (d_loss + d_batch_loss*100).backward()    # discriminate between fake and real
+                                else:
+                                    d_loss.backward()
                                 optimizer_d.step()
+                        self.writer.add_scalar('reconst_loss', reconst_loss, global_step=self.epoch)
+                        self.writer.add_scalar('g_loss', g_loss, global_step=self.epoch)
+                        self.writer.add_scalar('d_loss', d_loss, global_step=self.epoch)
+                        self.writer.add_scalar('z_rec_loss', z_rec_loss, global_step=self.epoch)
+                        if d_batch_loss is not None:
+                            self.writer.add_scalar('g_batch_loss', g_batch_loss, global_step=self.epoch)
+                            self.writer.add_scalar('d_batch_loss', d_batch_loss, global_step=self.epoch)
                         
                     else:
-                        print('loss', loss)
                         if np.isnan(loss.detach().cpu()):
                             break
 
@@ -493,29 +489,6 @@ class EarlyStopping:
     
     
 class UnsupervisedTrainer(Trainer):
-    r"""The VariationalInference class for the unsupervised training of an autoencoder.
-
-    Args:
-        :model: A model instance from class ``VAE``, ``VAEC``, ``SCANVI``
-        :gene_dataset: A gene_dataset instance like ``CortexDataset()``
-        :train_size: The train size, either a float between 0 and 1 or an integer for the number of training samples
-         to use Default: ``0.8``.
-        :test_size: The test size, either a float between 0 and 1 or an integer for the number of training samples
-         to use Default: ``None``, which is equivalent to data not in the train set. If ``train_size`` and ``test_size``
-         do not add to 1 or the length of the dataset then the remaining samples are added to a ``validation_set``.
-        :n_epochs_kl_warmup: Number of epochs for linear warmup of KL(q(z|x)||p(z)) term. After `n_epochs_kl_warmup`,
-            the training objective is the ELBO. This might be used to prevent inactivity of latent units, and/or to
-            improve clustering of latent space, as a long warmup turns the model into something more of an autoencoder.
-        :\*\*kwargs: Other keywords arguments from the general Trainer class.
-
-    Examples:
-        >>> gene_dataset = CortexDataset()
-        >>> vae = VAE(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * False,
-        ... n_labels=gene_dataset.n_labels)
-
-        >>> infer = VariationalInference(gene_dataset, vae, train_size=0.5)
-        >>> infer.train(n_epochs=20, lr=1e-3)
-    """
     default_metrics_to_monitor = ["elbo"]
 
     def __init__(
@@ -552,8 +525,8 @@ class UnsupervisedTrainer(Trainer):
             reconst_loss, kl_divergence = loss
             return torch.mean(reconst_loss + self.kl_weight * kl_divergence)
         elif len(loss) > 2:
-            reconst_loss, kl_divergence, g_loss, d_loss, z_rec_loss = loss
-            return torch.mean(reconst_loss + self.kl_weight * kl_divergence), g_loss, d_loss, z_rec_loss
+            reconst_loss, kl_divergence, g_loss, d_loss, z_rec_loss, g_batch_loss, d_batch_loss = loss
+            return torch.mean(reconst_loss + self.kl_weight * kl_divergence), g_loss, d_loss, z_rec_loss, g_batch_loss, d_batch_loss
         
 
     def on_epoch_begin(self):

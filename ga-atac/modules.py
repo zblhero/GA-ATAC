@@ -93,7 +93,7 @@ class DecoderSCVI(nn.Module):
         px_dropout = self.px_dropout_decoder(px)
         
         px_alpha = self.px_alpha_decoder(px)+1
-        #library = torch.clamp(library, max=12)
+        library = torch.clamp(library, max=12)
         # Clamp to high value: exp(12) ~ 160000 to avoid nans (computational stability)
         px_rate = torch.exp(library) * px_scale  
         px_rate = torch.clamp(px_rate, max=12)
@@ -105,9 +105,12 @@ class DecoderSCVI(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_dim, hidden_size, gan_loss):
+    def __init__(self, input_dim, hidden_size, n_batch_gan, gan_loss):
         super(Discriminator, self).__init__()
         
+        self.n_batch_gan = n_batch_gan
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim=1)
         self.model = nn.Sequential(
                 nn.Linear(input_dim, 512),
                 nn.BatchNorm1d(512, momentum=0.01, eps=0.001),
@@ -117,11 +120,20 @@ class Discriminator(nn.Module):
                 nn.BatchNorm1d(256, momentum=0.01, eps=0.001),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Dropout(0.4),
-                nn.Linear(256, 1),
-                nn.Sigmoid(),
+                nn.Linear(256, 1+n_batch_gan),
+                #nn.Sigmoid(),
         )
 
     def forward(self, x):
         validity = self.model(x)
+        
+        if self.n_batch_gan == 0:
+            out = self.sigmoid(validity)
+            return out, None
+        else:
+            out1 = self.sigmoid(validity[:, :1])
+            #out2 = self.softmax(validity[:, 1:])
+            out2 = validity[:, 1:]
+            
 
-        return validity
+            return out1, out2

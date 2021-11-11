@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.decomposition import TruncatedSVD
 from pprint import pprint
 
-from MulticoreTSNE import MulticoreTSNE as TSNE
+from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.metrics import adjusted_rand_score as ARI
 from sklearn.metrics import normalized_mutual_info_score as NMI
@@ -81,22 +81,28 @@ def clustering(Xsvd, cells, dataset, suffix, labels=None, tlabels=None, method='
                     labels_pred.append(partition[i])
 
                 labels_pred = np.array(labels_pred)
-                print('louvain', louvain, tsne[:5], labels_pred)
+                print('louvain', louvain, tsne[:5], len(labels), len(labels_pred))
                 #print(np.unique(labels_pred))
 
-                #if labels is not None:
-                #    nmi_score = NMI(labels, labels_pred)
-                #    ari_score = ARI(labels, labels_pred)
-                #    print(n_components, method, "Clustering Scores:\nNMI: %.4f\nARI: %.4f\n"% (nmi_score, ari_score))
+                if labels is not None:
+                    nmi_score = NMI(labels, labels_pred)
+                    ari_score = ARI(labels, labels_pred)
+                    print(n_components, method, "Clustering Scores:\nNMI: %.4f\nARI: %.4f\n"% (nmi_score, ari_score))
     
     if istsne:
         n_components = len(np.unique(labels_pred))
         vis_x = tsne[:, 0]
         vis_y = tsne[:, 1]
-        colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'yellow', 'black', 'teal', 'plum', 'tan', 'bisque', 'beige', 'slategray', 'brown']
+        colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'yellow', 'black', 'teal', 'plum', 'tan', 'bisque', 'beige', 'slategray', 'brown', 'darkred', 'salmon', 'coral', 'olive', 'lightpink', 'teal', 'darkcyan', 'BlueViolet', 'CornflowerBlue', 'DarkKhaki', 'DarkTurquoise']
 
-        #show_tsne(tsne, labels, 'result/%s/%s-%s-LSI-true.png'%(dataset, name, suffix), tlabels=tlabels)
+        show_tsne(tsne, labels, 'result/%s/%s-%s-LSI-true.png'%(dataset, name, suffix), tlabels=tlabels)
         show_tsne(tsne, labels_pred, 'result/%s/%s-%s-LSI-pred.png'%(dataset, name, suffix))
+        
+        with open('result/%s-LSI-cluster_result.csv'%(dataset), 'w') as f:
+            f.write('cell,predicted label,tsne-1,tsne-2\n')
+            for cell, pred, t in zip(cells, labels_pred, tsne):
+                f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
+                
     if batch_labels is not None:
         show_tsne(tsne, batch_labels, 'result/%s/%s-GMVAE-%s-%s-batch.png'%(dataset, dataset, suffix, name))
 
@@ -169,11 +175,11 @@ def main():
     np.random.seed(seed)
     
     #dataset = 'GSE99172'
-    dataset = 'ZY_bin_cell_matrix'
+    dataset = 'pbmc_two_batch'
     suffix = ''
     alg = 'LSI'
     name = 'bin'
-    min_peaks = 100
+    min_peaks = 5000
     batch = False
     
     if batch:
@@ -187,12 +193,12 @@ def main():
     
     #X, cells, peaks, labels, cell_types, tlabels, = extract.extract_data(dataset)
     #X, cells, peaks, labels, cell_types, tlabels, = extract.extract_data(dataset)
-    X, cells, peaks, labels, cell_types, tlabels, = extract.extract_simulated(dataset, suffix)
-    print(X.shape)
+    X, cells, peaks, labels, cell_types, tlabels, batches = extract.extract_simulated(dataset, suffix=suffix, is_labeled=True, batch=2)
+    print(X.shape, len(labels), len(tlabels))
     
     filter = True
     if filter:
-        d = SingleCellDataset(X, peaks, cells, low=0.05, high=0.95, min_peaks=min_peaks)
+        d = SingleCellDataset(X, peaks, cells, low=0.2, high=0.9, min_peaks=min_peaks)
         #d = SingleCellDataset(X, peaks, cells, low=0.005, high=1, min_peaks=0)
         labels = [labels[i] for i in d.barcode if labels is not None]
         tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]

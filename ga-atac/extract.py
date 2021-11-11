@@ -82,7 +82,8 @@ def load_data(filename, cell_num):
                     row.append(int(values[1])-1)
                     data.append(int(values[2]))
             except ValueError:
-                print(line)
+                #print(line)
+                pass
     print('load data', len(data), len(row), len(col), np.unique(row), np.unique(col))
     X = coo_matrix((data, (row, col))).toarray()
     del data
@@ -90,13 +91,29 @@ def load_data(filename, cell_num):
     del col
     return X
 
+def read_batches(filename):
+    df = pd.read_csv(os.path.dirname(__file__)+filename, delimiter=',')
+    df['batch'] = df['batch'].apply(lambda x: int(x[-1])-1)
+    return df.batch.values
+    
+    
 
-def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean'):
+
+def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean', batch=False):
     dirname = '/../data/%s/'%(dataset) 
     
     
     cells = read_barcodes(dirname+'%s_barcode.txt'%(dataset))
-    X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset), len(cells))
+    if dataset == 'pbmc_two_batch':
+        X = load_data(dirname+'%s_ATAC_matrix.txt'%(dataset), len(cells))
+        print('ATAC binary: ', X.shape, X.max(), X.min())  # (14623, 277809)
+        X1 = load_data(dirname+'%s_RNA_matrix.txt'%(dataset), len(cells))
+        X1 = X1/7545.0
+        print('RNA not binary: ', X1.shape, X1.max(), X1.min())  # (14623, 36601)
+        
+        X = np.concatenate((X, X1), axis=1)
+    else:
+        X = load_data(dirname+'%s_SparseMatrix.txt'%(dataset), len(cells))
     
     try:
         peaks = read_pos(dirname+'%s_peak.bed'%(dataset))
@@ -108,12 +125,22 @@ def extract_simulated(dataset='GSE65360', is_labeled=True, suffix='clean'):
         labels, cell_types, tlabels = read_labels(dirname+'%s_celltype_info.csv'%(dataset), cells, dataset)
     else:
         labels, cell_types, tlabels = None, None, None
+        
+    if dataset == 'pbmc3k':
+        print(X.shape, 'RNA', X[:, :36572].shape, X[:, :36572].max(), X[:, :36572].min(), 'ATAC', X[:, 36572:].shape, X[:, 36572:].max(), X[:, 36572:].min())
+        X[:, :36572] = X[:, :36572]/7545.0
+        X[:, 36572:] = np.where(X[:, 36572:]>0, 1, 0)
+        #X = X[:, 36572:]
+        print("load X", X.shape, X.max(), X.min())
+    
+    if batch:
+        batches = read_batches(dirname + '%s_batch_info.csv'%(dataset))
+        print('batch', len(batches))
+        return X, cells, peaks, labels, cell_types, tlabels, batches
     
     
-    
-    
-    print(X.shape, len(peaks), len(cells))
-    return X, cells, peaks, labels, cell_types, tlabels
+    print(X.shape, len(cells)), len(peaks)
+    return X, cells, peaks, labels, cell_types, tlabels, None
     
 
 
@@ -124,4 +151,4 @@ if __name__ == "__main__":
     
     #extract_simulated(dataset='For_specific_peak', suffix='')
     
-    extract_simulated(dataset='scRNA_cortex', suffix='')
+    extract_simulated(dataset='pbmc_two_batch', suffix='', is_labeled=False, batch=True)
