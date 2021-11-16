@@ -183,8 +183,9 @@ def clustering_scores(args, latent, labels, cells, dataset, suffix, tlabels, lou
     np.savetxt('result/%s/labels.txt'%(dataset), labels_pred)
 
     #if labels is not None:   
+    result_filename = 'result/%s-%d-%d-%d-cluster_result.csv'%(dataset, args.n_hidden, args.n_latent, louvain_num)
     if len(labels) == 0:
-        with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
+        with open(result_filename, 'w') as f:
             f.write('cell,predicted label,tsne-1,tsne-2\n')
             for cell, pred, t in zip(cells, labels_pred, embedding):
                 f.write('%s,%d,%f,%f\n'%(cell, pred, t[0], t[1]))
@@ -194,12 +195,12 @@ def clustering_scores(args, latent, labels, cells, dataset, suffix, tlabels, lou
     else:
         show_tsne(embedding, labels, 'result/%s/%s-GMVAE-%s-%s-true.png'%(dataset, suffix, 'alpha-gan', ensemble), tlabels=tlabels)
         if batch_indices is None:
-            with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
+            with open(result_filename, 'w') as f:
                 f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2\n')
                 for cell, label, tlabel, pred, t in zip(cells, labels, tlabels, labels_pred, embedding):
                     f.write('%s,%d,%s,%d,%f,%f\n'%(cell, label, tlabel, pred, t[0], t[1]))
         else:
-            with open('result/%s-cluster_result.csv'%(dataset), 'w') as f:
+            with open(result_filename, 'w') as f:
                 f.write('cell,tlabel id,label,predicted label,tsne-1,tsne-2,batch\n')
                 for cell, label, tlabel, pred, t, batch in zip(cells, labels, tlabels, labels_pred, embedding, batch_indices):
                     f.write('%s,%d,%s,%d,%f,%f,%d\n'%(cell, label, tlabel, pred, t[0], t[1], batch))

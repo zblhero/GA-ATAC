@@ -36,7 +36,7 @@ def set_seed(seed):
 
     
 def cluster(args, dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, 
-            min_peaks=100, min_cells=0.05, max_cells=0.95, dropout=0.0, binary=True, n_epochs=1000, 
+            min_peaks=100, min_cells=0.05, max_cells=0.95, dropout=0.0, binary=True, n_epochs=1, 
             is_labeled=True, gpu=-1):
     set_seed(seed)
     use_batches = False
@@ -48,7 +48,7 @@ def cluster(args, dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     else:
         use_cuda = False
     
-    X, cells, peaks, labels, cell_types, tlabels, batches = extract.extract_simulated(dataset, is_labeled = is_labeled, batch = args.batch)   # downloaded 
+    X, cells, peaks, labels, cell_types, tlabels, batches = extract.extract_simulated(dataset, is_labeled = is_labeled, batch = args.batch)   # downloaded
     
     if binary:
         X = np.where(X>0, 1, 0)   # out of memory
@@ -57,11 +57,14 @@ def cluster(args, dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     del X
     labels = [labels[i] for i in d.barcode if labels is not None]
     tlabels = [tlabels[i] for i in d.barcode if tlabels is not None]
+    cells = [cells[i] for i in d.barcode if cells is not None]
     batches = [batches[i] for i in d.barcode if batches is not None]
     gene_dataset = SCDataset('models/', mat=d.data, ylabels=labels, tlabels=tlabels, cell_types=cell_types)  # out of memory 
     del d 
     print('filter data info', gene_dataset.mat.shape, gene_dataset.mat.max(), gene_dataset.mat.min())
     print('labels', len(labels))
+    
+    
     
     model = GAATAC(gene_dataset.nb_genes, n_batch=gene_dataset.n_batches * use_batches, X=gene_dataset.X,
              n_hidden=n_hidden, n_latent=n_latent, dropout_rate=dropout, reconst_ratio=ratio, use_cuda=use_cuda, n_batch_gan=2)
@@ -82,8 +85,8 @@ def cluster(args, dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6,
     latent = get_latent(gene_dataset, trainer.model, use_cuda)
     
     print('get clustering', n_hidden, n_latent, louvain_num)
-    for louvain_num in [30]:
-    #for louvain_num in [100]:
+    #for louvain_num in [10]:
+    if True:
         print('louvain_num', louvain_num)
         if use_batches:
             batch_indices = batches
@@ -119,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument('--min_peaks', type=float, default=100, help='Remove low quality cells with few peaks')
     parser.add_argument('--min_cells', type=float, default=0.05, help='Remove low quality peaks')
     parser.add_argument('--max_cells', type=float, default=0.95, help='Remove low quality peaks')
-    parser.add_argument('--n_epochs', type=int, default=1000, help='Learning rate')
+    parser.add_argument('--n_epochs', type=int, default=1, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--dropout', type=float, default=0.0, help='dropout in the fc layer')
     parser.add_argument('--binary', type=int, default=1, help='binarize the data')
