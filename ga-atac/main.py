@@ -36,7 +36,7 @@ def set_seed(seed):
 
     
 def cluster(args, dataset, n_hidden, n_latent, louvain_num, ratio=0.1, seed=6, 
-            min_peaks=100, min_cells=0.05, max_cells=0.95, dropout=0.0, binary=True, n_epochs=1, 
+            min_peaks=100, min_cells=0.05, max_cells=0.95, dropout=0.0, binary=True, n_epochs=1000, 
             is_labeled=True, gpu=-1):
     set_seed(seed)
     use_batches = False
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument('--min_peaks', type=float, default=100, help='Remove low quality cells with few peaks')
     parser.add_argument('--min_cells', type=float, default=0.05, help='Remove low quality peaks')
     parser.add_argument('--max_cells', type=float, default=0.95, help='Remove low quality peaks')
-    parser.add_argument('--n_epochs', type=int, default=1, help='Learning rate')
+    parser.add_argument('--n_epochs', type=int, default=1000, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--dropout', type=float, default=0.0, help='dropout in the fc layer')
     parser.add_argument('--binary', type=int, default=1, help='binarize the data')
